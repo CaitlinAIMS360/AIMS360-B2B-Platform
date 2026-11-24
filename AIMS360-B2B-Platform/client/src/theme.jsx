@@ -1,4 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+
+// The brand's uploaded logo, shared by every screen that shows the wordmark.
+let brand = { logo: '', logoDark: '', name: '' };
+const watchers = new Set();
+export function setBrand(next) {
+  brand = { ...brand, ...next };
+  watchers.forEach((fn) => fn());
+}
+const subscribe = (fn) => { watchers.add(fn); return () => watchers.delete(fn); };
 
 // Light / dark theme. Follows the device setting until the person picks one.
 function initial() {
@@ -49,10 +58,19 @@ export function ThemeToggle({ theme, toggle }) {
   );
 }
 
-export function Wordmark({ sub = 'B2B Wholesale' }) {
+// `onDark` is for places that are always dark, like the sign-in artwork.
+export function Wordmark({ sub = 'B2B Wholesale', onDark = false }) {
+  const b = useSyncExternalStore(subscribe, () => brand);
+  const darkSrc = b.logoDark || b.logo;
+  const alt = b.name || 'Brand logo';
   return (
     <span className="brand">
-      <span className="word">AIMS360</span>
+      {b.logo ? (
+        <>
+          {!onDark && <img className="logo for-light" src={b.logo} alt={alt} />}
+          <img className={`logo ${onDark ? '' : 'for-dark'} ${b.logoDark ? '' : 'chip'}`} src={darkSrc} alt={onDark ? alt : ''} />
+        </>
+      ) : <span className="word">AIMS360</span>}
       <span className="sub">{sub}</span>
     </span>
   );

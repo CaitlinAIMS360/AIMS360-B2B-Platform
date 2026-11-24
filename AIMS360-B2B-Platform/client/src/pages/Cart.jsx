@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { get, post, money, shortDate } from '../api.js';
 import { useCart } from '../cart.jsx';
-import { Notices, CreditMeter } from '../components/bits.jsx';
+import { Notices, CreditMeter, Sizes } from '../components/bits.jsx';
 import CustomerPicker from '../components/CustomerPicker.jsx';
 
 const TYPE_HELP = {
@@ -140,7 +140,7 @@ export default function Cart({ config, role }) {
                   <div>
                     <Link to={`/catalog/${l.style}`}><b>{l.description}</b></Link>
                     <div className="small muted">{l.style} · {l.colorDescription} · {l.season}</div>
-                    <div className="small">{Object.entries(l.sizes).map(([s, q]) => `${s} × ${q}`).join('   ')}</div>
+                    <Sizes items={Object.entries(l.sizes)} />
                     {admin && (
                       <label className="linedisc">
                         <span>Line Discount %</span>

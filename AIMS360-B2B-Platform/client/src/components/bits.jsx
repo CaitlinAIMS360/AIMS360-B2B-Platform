@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 export function StatusPill({ order }) {
-  const cls = { Open: 'good', Hold: 'warn', Cancelled: 'bad' }[order.status] || '';
+  const cls = { Open: 'good', Hold: 'warn', Cancelled: 'bad', Shipped: 'done' }[order.status] || '';
   const label =
     order.status === 'Hold' && order.orderStatusReason === 'CR' ? 'Hold · Credit Review' : order.status;
   return <span className={`pill ${cls}`}>{label}</span>;
@@ -62,3 +62,23 @@ export function ConfirmButton({ label, confirmLabel = 'Yes, Continue', className
 
 // Printing is not available when the portal runs as a Claude artifact.
 export const canPrint = import.meta.env.MODE !== 'artifact';
+
+// Quantities by size as small tags: the size on the left, the quantity on the right.
+export function Sizes({ items }) {
+  return (
+    <span className="sizetags">
+      {items.filter(([, q]) => Number(q) > 0).map(([name, q]) => <span key={name} className="sizetag"><i>{name}</i>{q}</span>)}
+    </span>
+  );
+}
+
+// A friendly "nothing here" panel.
+export function Empty({ title, children }) {
+  return (
+    <div className="empty">
+      <div className="empty-dot" aria-hidden="true" />
+      <b>{title}</b>
+      {children && <div className="muted small">{children}</div>}
+    </div>
+  );
+}

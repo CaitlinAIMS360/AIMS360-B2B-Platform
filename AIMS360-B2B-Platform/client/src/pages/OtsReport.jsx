@@ -67,7 +67,7 @@ export default function OtsReport({ role }) {
           {shown.map((r) => (
             <label key={r.key} className={picked.includes(r.key) ? 'on' : ''}>
               <input type="checkbox" checked={picked.includes(r.key)} onChange={() => toggle(r.key)} />
-              <span className="swatch" style={{ background: r.c.hex }} />
+              <span className="swatch" data-none={r.c.hex ? undefined : ''} style={{ background: r.c.hex }} />
               <span className="grow"><b>{r.s.style}</b> · {r.c.colorDescription}<span className="small muted" style={{ display: 'block' }}>{r.s.description}</span></span>
             </label>
           ))}

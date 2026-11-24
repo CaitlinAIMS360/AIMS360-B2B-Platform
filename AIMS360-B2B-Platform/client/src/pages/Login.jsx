@@ -32,7 +32,7 @@ export default function Login({ config, onLogin, theme }) {
   return (
     <div className="login">
       <div className="login-art">
-        <Wordmark />
+        <Link to="/" aria-label="Home"><Wordmark onDark /></Link>
         <div>
           <div className="eyebrow">Wholesale Ordering</div>
           <h1>Your line, live. Order in minutes.</h1>
@@ -50,14 +50,14 @@ export default function Login({ config, onLogin, theme }) {
       <div className="login-form">
         <div className="theme-corner"><ThemeToggle {...theme} /></div>
         <form className="card" onSubmit={submit}>
-          <div style={{ marginBottom: 22 }}><Wordmark /></div>
+          <div style={{ marginBottom: 22 }}><Link to="/" aria-label="Home"><Wordmark /></Link></div>
           <h2>Sign In</h2>
           <div className="tabs" role="tablist">
             <button type="button" className={portal === 'buyer' ? 'on' : ''} onClick={() => setPortal('buyer')}>Retail Buyer</button>
             <button type="button" className={portal === 'admin' ? 'on' : ''} onClick={() => setPortal('admin')}>Brand Admin</button>
           </div>
           {portal === 'admin' && (
-            <p className="small muted">Brand admins will sign in with their Runway login in the live version.</p>
+            <p className="small muted">Runway sign-in is not connected yet. For now, click Admin under Demo logins below, then Sign In.</p>
           )}
           <div className="field">
             <label htmlFor="email">Email</label>
@@ -78,7 +78,7 @@ export default function Login({ config, onLogin, theme }) {
           )}
           {config.mode === 'demo' && (
             <div className="small muted" style={{ marginTop: 18 }}>
-              <div style={{ marginBottom: 6 }}>Demo logins:</div>
+              <div style={{ marginBottom: 6 }}>Demo logins (click one, then Sign In):</div>
               <div className="row">
                 <button type="button" className="btn sm" onClick={() => demo('buyer@aimscaitlin.test', 'buyer1234', 'buyer')}>Buyer (Key Account)</button>
                 <button type="button" className="btn sm" onClick={() => demo('buyer@activewear.test', 'buyer1234', 'buyer')}>Buyer (Near Credit Limit)</button>

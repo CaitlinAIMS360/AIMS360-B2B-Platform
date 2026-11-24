@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { get, post, money } from '../api.js';
 import { ThemeToggle, Wordmark } from '../theme.jsx';
+import { DataBanner } from './admin/Connect.jsx';
+import LinesheetBody, { LinesheetHeading } from '../components/LinesheetBody.jsx';
 import ProductCard from '../components/ProductCard.jsx';
 
 function GuestCatalog() {
@@ -93,7 +95,7 @@ function GuestLinesheets() {
       <div className="sheets">
         {rows.map((l) => (
           <Link key={l.id} to={`/browse/linesheets/${l.id}`} className="sheet">
-            <div className="cover">{l.cover.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}</div>
+            {l.hero ? <div className="cover hero"><img src={l.hero} alt="" loading="lazy" /></div> : <div className="cover">{l.cover.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}</div>}
             <div className="body">
               {l.seasonName && <span className="pill dark" style={{ marginBottom: 6 }}>{l.seasonName}</span>}
               <div className="name">{l.name}</div>
@@ -115,10 +117,8 @@ function GuestLinesheet() {
   return (
     <div>
       <p className="small"><Link to="/browse/linesheets" className="muted">← Linesheets</Link></p>
-      <div className="eyebrow">{l.seasonName || 'Linesheet'}</div>
-      <h1>{l.name}</h1>
-      {l.description && <p className="muted" style={{ maxWidth: '46em' }}>{l.description}</p>}
-      <div className="products" style={{ marginTop: 18 }}>{l.items.map((s) => <ProductCard key={s.style} s={s} base="/browse/style" guest />)}</div>
+      <LinesheetHeading l={l} />
+      <LinesheetBody l={l} base="/browse/style" guest />
     </div>
   );
 }
@@ -177,7 +177,7 @@ export default function Guest({ config, theme }) {
   const link = ({ isActive }) => (isActive ? 'active' : '');
   return (
     <>
-      {config.mode === 'demo' && <div className="demo-banner">Demo mode: sample data, nothing is sent to AIMS360.</div>}
+      <DataBanner config={config} />
       <header className="topbar">
         <div className="topbar-inner">
           <Link to="/browse" aria-label="Catalog"><Wordmark /></Link>

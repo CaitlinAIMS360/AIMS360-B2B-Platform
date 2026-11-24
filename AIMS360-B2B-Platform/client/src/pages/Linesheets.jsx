@@ -23,7 +23,7 @@ export default function Linesheets({ role }) {
       <div className="sheets">
         {rows.map((l) => (
           <Link key={l.id} to={`/linesheets/${l.id}`} className="sheet">
-            <div className="cover">{l.cover.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}</div>
+            {l.hero ? <div className="cover hero"><img src={l.hero} alt="" loading="lazy" /></div> : <div className="cover">{l.cover.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}</div>}
             <div className="body">
               <div className="row" style={{ gap: 6, marginBottom: 6 }}>
                 {l.seasonName && <span className="pill dark">{l.seasonName}</span>}
@@ -31,7 +31,7 @@ export default function Linesheets({ role }) {
                 {role === 'admin' && <span className="pill">{l.customerAccounts.length ? `${l.customerAccounts.length} Customer${l.customerAccounts.length > 1 ? 's' : ''}` : 'All Customers'}</span>}
               </div>
               <div className="name">{l.name}</div>
-              <div className="small muted">{l.styleCount} styles</div>
+              <div className="small muted">{l.styleCount} styles{l.dropCount > 0 && ` · ${l.dropCount} drop${l.dropCount > 1 ? 's' : ''}`}</div>
             </div>
           </Link>
         ))}

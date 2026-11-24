@@ -62,7 +62,7 @@ export function catalogStyle(style, customerAccount, settings, opts = {}) {
     retail: price.retail,
     priceSource: price.source,
     colors,
-    warehouses: opts.warehouses
+    warehouses: opts.warehouses && p.mode !== 'live'
       ? style.colors.map((c) => ({ color: c.color, colorDescription: c.colorDescription, stock: p.stockByWarehouse(c) }))
       : undefined,
     availableNow: colors.some((c) => c.nowUnits > 0),

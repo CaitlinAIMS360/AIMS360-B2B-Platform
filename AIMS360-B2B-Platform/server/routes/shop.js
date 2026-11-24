@@ -4,10 +4,12 @@
 import { Router } from 'express';
 import { currentUser } from '../auth.js';
 import { getProvider } from '../aims360/index.js';
-import { load, logActivity } from '../store.js';
+import { load, save, logActivity } from '../store.js';
+import { sendsOrders, createOrderInAims } from '../aims360/rest.js';
 import { buildPreview, submitCart, catalogStyle, creditCheck, accountFor } from '../ordering.js';
 import { orderView } from '../views.js';
 import { sendExport } from '../exports.js';
+import { sectionsOf, layoutOf } from '../linesheets.js';
 import { matchLines, parseText, linesFromOrder, parseOrderForm } from '../quickOrder.js';
 
 const r = Router();
@@ -72,7 +74,7 @@ function catalogFor(req, styles) {
 export const list = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
 export const count = (items, pick) => {
   const m = new Map();
-  for (const it of items) for (const k of [].concat(pick(it))) m.set(k, (m.get(k) || 0) + 1);
+  for (const it of items) for (const k of [].concat(pick(it))) if (k) m.set(k, (m.get(k) || 0) + 1);
   return [...m.entries()].map(([name, n]) => ({ name, count: n })).sort((x, y) => x.name.localeCompare(y.name));
 };
 export const sorters = {
@@ -134,7 +136,8 @@ r.get('/catalog/:style', (req, res) => {
 
 // Linesheets: buyers see active ones shared with everyone or with their account.
 function visibleLinesheets(user) {
-  const { linesheets } = load();
+  let { linesheets } = load();
+  linesheets = linesheets.filter((l) => (l.company || '') === p().company());
   if (user.role === 'admin') return linesheets;
   return linesheets.filter((l) => l.active && (!l.customerAccounts.length || l.customerAccounts.includes(user.customerAccount)));
 }
@@ -146,6 +149,7 @@ r.get('/linesheets', (req, res) => {
       return {
         ...l,
         styleCount: styles.length,
+        dropCount: layoutOf(l).filter((x) => x.type === 'divider').length,
         seasonName: p().listSeasons().find((s) => s.code === l.season)?.description || '',
         cover: styles.slice(0, 4).map((s) => `/api/images/${s.style}/${s.colors[0].color}.svg`)
       };
@@ -157,10 +161,13 @@ r.get('/linesheets/:id', (req, res) => {
   const l = visibleLinesheets(req.user).find((x) => x.id === req.params.id);
   if (!l) return res.status(404).json({ error: 'Linesheet not found' });
   const styles = l.styles.map((code) => p().getStyle(code)).filter(Boolean);
+  const items = catalogFor(req, styles);
   res.json({
     ...l,
+    layout: layoutOf(l),
     seasonName: p().listSeasons().find((s) => s.code === l.season)?.description || '',
-    items: catalogFor(req, styles)
+    items,
+    sections: sectionsOf(l, (code) => items.find((s) => s.style === code))
   });
 });
 
@@ -177,8 +184,12 @@ r.get('/linesheets/:id/export', async (req, res, next) => {
     const l = visibleLinesheets(req.user).find((x) => x.id === req.params.id);
     if (!l) return res.status(404).json({ error: 'Linesheet not found' });
     const items = catalogFor(req, l.styles.map((code) => p().getStyle(code)).filter(Boolean));
-    const rows = items.flatMap((s) => s.colors.map((c) => ({ s, c })));
-    await sendExport(res, req.query.format, rows, { kind: 'linesheet', title: l.name, subtitle: `${priceNote(req)} · ${stamp()}`, images: req.query.images !== '0' }, l.name);
+    // Each divider becomes a heading above its first row in the PDF and Excel exports.
+    const rows = sectionsOf(l, (code) => items.find((s) => s.style === code)).flatMap((sec) =>
+      sec.items.flatMap((s) => s.colors.map((c) => ({ s, c }))).map((row, i) => (i === 0 && sec.title ? { ...row, section: sec.title, sectionNote: sec.note } : row))
+    );
+    const { settings } = load();
+    await sendExport(res, req.query.format, rows, { kind: 'linesheet', title: l.name, subtitle: `${priceNote(req)} · ${stamp()}`, images: req.query.images !== '0', hero: l.hero, logo: settings.logo }, l.name);
   } catch (e) {
     next(e);
   }
@@ -234,9 +245,25 @@ r.post('/cart/fill', async (req, res, next) => {
 
 r.post('/cart/preview', (req, res) => res.json(buildPreview(req.user, req.body || {})));
 
-r.post('/orders', (req, res) => {
+r.post('/orders', async (req, res) => {
   const result = submitCart(req.user, req.body || {});
   if (!result.ok) return res.status(400).json(result.preview);
+  // Hosted portal with AIMS360_SEND_ORDERS=true: create each order in AIMS360 too.
+  // The portal's copy is kept either way, and records what AIMS360 said.
+  if (sendsOrders()) {
+    for (let i = 0; i < result.orders.length; i++) {
+      const o = result.orders[i];
+      const { createdBy, ...payload } = result.preview.orders[i].payload;
+      payload.lineItems = payload.lineItems.map(({ listPrice, discountPercent, ...l }) => l);
+      try {
+        const out = await createOrderInAims(payload);
+        o.aims = { sent: true, order: String(out?.order ?? out?.orderNumber ?? out?.value?.order ?? ''), at: new Date().toISOString() };
+      } catch (e) {
+        o.aims = { sent: false, error: e.message, at: new Date().toISOString() };
+      }
+    }
+    save();
+  }
   for (const o of result.orders)
     logActivity(req.user.email, 'order.created', `Order ${o.order} for ${o.customerName} (${o.status}, ${o.customFields[0]?.valueDescription || ''})`);
   res.json({ orders: result.orders.map(orderView), preview: result.preview });

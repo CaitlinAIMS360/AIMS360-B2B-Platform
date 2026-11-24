@@ -7,6 +7,9 @@ export const company = {
   companyName: 'CAITLIN TEST COMPANY 2 (demo data)'
 };
 
+// Set when the portal is showing live AIMS360 data instead of the samples (see live.js).
+export const live = { on: false, account: '', companyName: '', database: '', user: '', connector: '', at: '', styles: 0, styleColors: 0, customers: 0 };
+
 export const seasons = [
   { code: 'SP27', description: 'Spring 2027' },
   { code: 'SU27', description: 'Summer 2027' },

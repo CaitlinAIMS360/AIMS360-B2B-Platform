@@ -56,7 +56,9 @@ export function orderOpenValue(o) {
 }
 
 export const demoProvider = {
-  mode: 'demo',
+  get mode() { return data.live.on ? 'live' : 'demo'; },
+  // Orders and linesheets made against one company never show under another.
+  company: () => (data.live.on ? data.live.account : ''),
 
   getCompany: () => data.company,
   listSeasons: () => data.seasons,
@@ -73,6 +75,7 @@ export const demoProvider = {
   listDiscountReasons: () => data.discountReasons,
   // ~ stock by warehouse from the style lookup
   stockByWarehouse(color) {
+    if (data.live.on) return []; // live stock by warehouse is not read yet, and is never estimated
     const total = color.sizes.reduce((t, z) => t + z.stock, 0);
     const first = Math.round(total * data.warehouses[0].share);
     return [
@@ -140,6 +143,7 @@ export const demoProvider = {
   listOrders({ customerAccount } = {}) {
     const st = load();
     return st.aimsOrders
+      .filter((o) => (o.company || '') === this.company())
       .filter((o) => !customerAccount || o.customerAccount === customerAccount)
       .sort((a, b) => b.createdOn.localeCompare(a.createdOn));
   },
@@ -149,7 +153,9 @@ export const demoProvider = {
   },
 
   openOrdersValue(account) {
-    return round2(this.listOrders({ customerAccount: account }).reduce((t, o) => t + orderOpenValue(o), 0));
+    // Live: open orders already in AIMS360, plus orders placed here that have not been sent.
+    const inAims = data.live.on ? this.getCustomer(account)?.liveOpenOrders || 0 : 0;
+    return round2(inAims + this.listOrders({ customerAccount: account }).reduce((t, o) => t + orderOpenValue(o), 0));
   },
 
   listCredits(account) {
@@ -229,6 +235,7 @@ export const demoProvider = {
       orderID: id('ord'),
       order: String(st.nextOrderNumber++),
       orderSource: 'B2B Portal',
+      company: this.company() || undefined,
       customerAccount: customer.customerAccount,
       customerName: customer.customerName,
       status: payload.status,

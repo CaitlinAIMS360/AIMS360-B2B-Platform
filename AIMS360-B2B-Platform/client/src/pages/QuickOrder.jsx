@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { post, money } from '../api.js';
+import { get, post, money } from '../api.js';
 import { useCart } from '../cart.jsx';
+import { Sizes } from '../components/bits.jsx';
 
 // Adds matched lines to the cart, on top of whatever is already there.
 export function useFillCart() {
@@ -21,23 +22,73 @@ export function useFillCart() {
 }
 
 const sample = 'TP3001, White, M, 24\nTP3001, White, L, 24\nAW1002, BLK, S, 12';
+let rowId = 1;
+const newRow = () => ({ id: rowId++, style: '', color: '', qty: {} });
+
+// One line of the quick-order grid: pick a style, tap a color, type quantities by size.
+function EntryRow({ row, styles, onChange, onRemove, canRemove }) {
+  const s = styles.find((x) => x.style === row.style.trim().toUpperCase().split(/\s/)[0]);
+  const c = s?.colors.find((x) => x.color === row.color) || s?.colors[0];
+  const units = Object.values(row.qty).reduce((t, q) => t + (Number(q) || 0), 0);
+  return (
+    <div className={`qo-row ${s ? 'ready' : ''}`}>
+      <div className="qo-thumb">{c ? <img src={c.image} alt="" /> : <span aria-hidden="true">+</span>}</div>
+      <div className="qo-main">
+        <div className="qo-style">
+          <input list="qo-styles" value={row.style} placeholder="Style number or name" aria-label="Style"
+            onChange={(e) => onChange({ ...row, style: e.target.value, color: '', qty: {} })} />
+          {s && <span className="qo-name"><b>{s.description}</b><span className="muted small"> · {money(s.price)}</span></span>}
+        </div>
+        {s && (
+          <>
+            <div className="qo-colors" role="group" aria-label="Color">
+              {s.colors.map((x) => (
+                <button key={x.color} type="button" className={`chip ${x.color === c.color ? 'on' : ''}`} aria-pressed={x.color === c.color} onClick={() => onChange({ ...row, color: x.color, qty: {} })}>
+                  <span className="swatch" data-none={x.hex ? undefined : ''} style={{ background: x.hex }} />{x.colorDescription}
+                </button>
+              ))}
+            </div>
+            <div className="qo-sizes">
+              {c.sizes.map((z) => (
+                <label key={z.sizeName} className="qo-size">
+                  <span>{z.sizeName}</span>
+                  <input inputMode="numeric" placeholder="0" value={row.qty[z.sizeName] ?? ''} aria-label={`${s.description} ${c.colorDescription} size ${z.sizeName}`}
+                    onChange={(e) => onChange({ ...row, color: c.color, qty: { ...row.qty, [z.sizeName]: e.target.value.replace(/\D/g, '') } })} />
+                </label>
+              ))}
+              <span className="qo-units">{units > 0 ? `${units} units` : ''}</span>
+            </div>
+          </>
+        )}
+      </div>
+      {canRemove && <button type="button" className="btn ghost sm" onClick={onRemove} aria-label="Remove this line" title="Remove">✕</button>}
+    </div>
+  );
+}
 
 export default function QuickOrder({ role }) {
   const { cart } = useCart();
   const fill = useFillCart();
   const nav = useNavigate();
+  const [styles, setStyles] = useState([]);
+  const [rows, setRows] = useState(() => [newRow()]);
   const [text, setText] = useState('');
+  const [paste, setPaste] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
 
-  const run = async (body) => {
+  useEffect(() => {
+    get(`/shop/catalog?customer=${encodeURIComponent(cart.customerAccount || '')}`).then((d) => setStyles(d.items));
+  }, [cart.customerAccount]);
+
+  const run = async (body, after) => {
     setBusy(true);
     setError('');
     setResult(null);
     try {
       const out = await post('/shop/cart/fill', { ...body, customerAccount: cart.customerAccount });
-      if (out.lines.length) fill(out);
+      if (out.lines.length) { fill(out); after?.(); }
       setResult(out);
     } catch (e) {
       setError(e.message);
@@ -55,34 +106,76 @@ export default function QuickOrder({ role }) {
     reader.readAsDataURL(file);
   };
 
+  // A new blank line appears as soon as the last one has a style, so there is always somewhere to type.
+  const change = (next) => setRows((a) => {
+    const b = a.map((r) => (r.id === next.id ? next : r));
+    return b[b.length - 1].style.trim() ? [...b, newRow()] : b;
+  });
+  const typed = rows.flatMap((r) => {
+    const code = r.style.trim().toUpperCase().split(/\s/)[0];
+    const s = styles.find((x) => x.style === code);
+    const color = r.color || s?.colors[0]?.color;
+    return Object.entries(r.qty).filter(([, q]) => Number(q) > 0).map(([size, q]) => `${code}\t${color}\t${size}\t${q}`);
+  });
+  const typedUnits = rows.reduce((t, r) => t + Object.values(r.qty).reduce((u, q) => u + (Number(q) || 0), 0), 0);
+
   return (
     <div className="stack">
       <div>
         <div className="eyebrow">Skip the Browsing</div>
         <h1>Quick Order</h1>
-        <p className="muted">Know what you want? Type it in or import a filled-in order form. Everything lands in your cart for review before anything is placed.</p>
+        <p className="muted">Know what you want? Pick styles and type quantities, or import a filled-in order form. Everything lands in your cart for review before anything is placed.</p>
       </div>
       {role === 'admin' && !cart.customerAccount && (
         <div className="notice warn">No customer is chosen yet, so prices shown are wholesale. Choose the customer on the <Link to="/cart"><b>New Order</b></Link> screen and the customer's prices apply.</div>
       )}
-      <div className="grid pair">
+      <datalist id="qo-styles">{styles.map((s) => <option key={s.style} value={s.style}>{s.description}</option>)}</datalist>
+      <div className="grid qo-layout">
         <div className="card">
-          <h2>Type or Paste Items</h2>
-          <p className="muted small">One item per line: style, color, size, quantity. Color can be the code or the name. Pasting from a spreadsheet works.</p>
-          <textarea rows={9} value={text} onChange={(e) => setText(e.target.value)} placeholder={sample} aria-label="Items to add" style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 13 }} />
-          <div className="row" style={{ marginTop: 12 }}>
-            <button className="btn primary" disabled={busy || !text.trim()} onClick={() => run({ text })}>Add to Cart</button>
-            <button className="btn ghost sm" onClick={() => setText(sample)}>Use an Example</button>
+          <div className="spread">
+            <h2>Add Items</h2>
+            <div className="seg" role="group" aria-label="How to add items">
+              <button type="button" className={!paste ? 'on' : ''} onClick={() => setPaste(false)}>Pick Styles</button>
+              <button type="button" className={paste ? 'on' : ''} onClick={() => setPaste(true)}>Paste a List</button>
+            </div>
           </div>
+          {!paste ? (
+            <>
+              <div className="qo-rows">
+                {rows.map((r) => (
+                  <EntryRow key={r.id} row={r} styles={styles} onChange={change} canRemove={rows.length > 1}
+                    onRemove={() => setRows((a) => (a.length > 1 ? a.filter((x) => x.id !== r.id) : a))} />
+                ))}
+              </div>
+              <div className="row" style={{ marginTop: 16 }}>
+                <button className="btn primary" disabled={busy || !typed.length} onClick={() => run({ text: typed.join('\n') }, () => setRows([newRow()]))}>
+                  {typedUnits ? `Add ${typedUnits} Units to Cart` : 'Add to Cart'}
+                </button>
+                <button type="button" className="btn ghost sm" onClick={() => setRows((a) => [...a, newRow()])}>Add Another Line</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="muted small" style={{ marginTop: 12 }}>One item per line: style, color, size, quantity. Color can be the code or the name. Copying rows from a spreadsheet works too.</p>
+              <textarea className="qo-paste" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={sample} aria-label="Items to add" />
+              <div className="row" style={{ marginTop: 12 }}>
+                <button className="btn primary" disabled={busy || !text.trim()} onClick={() => run({ text }, () => setText(''))}>Add to Cart</button>
+                <button className="btn ghost sm" onClick={() => setText(sample)}>Use an Example</button>
+              </div>
+            </>
+          )}
         </div>
-        <div className="card">
+        <div className="card qo-import">
+          <div className="qo-icon" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 18v-6M9.5 14.5 12 12l2.5 2.5" /></svg>
+          </div>
           <h2>Import an Order Form</h2>
-          <p className="muted small">Export the Excel order form from any linesheet, fill in the quantities, then import it here. The PO number and order type come across too if they are filled in.</p>
+          <p className="muted small">Export the Excel order form from any linesheet, fill in the quantities, then import it here. The PO number and order type come across too.</p>
           <label className="btn" style={{ cursor: 'pointer' }}>
             {busy ? 'Reading…' : 'Choose Excel File'}
             <input type="file" accept=".xlsx" onChange={onFile} disabled={busy} style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} />
           </label>
-          <p className="small" style={{ marginTop: 14 }}><Link to="/linesheets" style={{ color: 'var(--accent-text)' }}><b>Go to Linesheets →</b></Link></p>
+          <p className="small" style={{ marginTop: 14, marginBottom: 0 }}><Link to="/linesheets" style={{ color: 'var(--accent-text)' }}><b>Get a Form From Linesheets →</b></Link></p>
         </div>
       </div>
       {error && <div className="notice bad" role="alert">{error}</div>}
@@ -107,7 +200,7 @@ export default function QuickOrder({ role }) {
                     <tr key={l.style + l.color}>
                       <td><b>{l.description}</b> <span className="muted small">{l.style}</span></td>
                       <td>{l.colorDescription}</td>
-                      <td>{Object.entries(l.sizes).map(([k, q]) => `${k} × ${q}`).join('  ')}</td>
+                      <td><Sizes items={Object.entries(l.sizes)} /></td>
                       <td className="right">{money(l.price)}</td>
                     </tr>
                   ))}

@@ -38,6 +38,17 @@ function sheetHeader(ws, opts, width) {
   ws.getCell(3, 1).font = { size: 10, color: { argb: 'FF727B89' } };
 }
 
+// A divider from the linesheet: a full-width heading row.
+function sectionRow(ws, n, title, note, width) {
+  ws.mergeCells(n, 1, n, width);
+  const cell = ws.getCell(n, 1);
+  cell.value = note ? `${title}  ·  ${note}` : title;
+  cell.font = { bold: true, size: 12, color: { argb: INK } };
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBE9F4' } };
+  ws.getRow(n).height = 22;
+  return n + 1;
+}
+
 function headRow(ws, rowNumber, labels) {
   const row = ws.getRow(rowNumber);
   labels.forEach((l, i) => {
@@ -64,7 +75,8 @@ export async function toXlsx(rows, opts) {
   sheetHeader(ws, opts, labels.length);
   headRow(ws, 5, labels);
   let n = 6;
-  for (const { s, c } of rows) {
+  for (const { s, c, section, sectionNote } of rows) {
+    if (section) n = sectionRow(ws, n, section, sectionNote, labels.length);
     const row = ws.getRow(n++);
     [s.style, s.description, s.category, c.colorDescription].forEach((v, i) => (row.getCell(i + 1).value = v));
     row.getCell(1).font = { bold: true };
@@ -113,7 +125,8 @@ export async function toOrderForm(rows, opts) {
   const unitCells = [];
   const amountCells = [];
   const L = (c) => ws.getColumn(c).letter;
-  for (const { s, c } of rows) {
+  for (const { s, c, section, sectionNote } of rows) {
+    if (section) n = sectionRow(ws, n, section, sectionNote, width) + 1;
     const sizeRow = ws.getRow(n);
     const qtyRow = ws.getRow(n + 1);
     sizeRow.getCell(1).value = s.style;
@@ -165,8 +178,13 @@ export function toPdf(rows, opts) {
     const img = opts.images !== false;
     const rowH = img ? 58 : 36;
 
+    let logoOk = !!opts.logo;
     const header = () => {
-      doc.font('Helvetica').fontSize(18).fillColor('#1b212b').text('A I M S 3 6 0', 40, 36, { characterSpacing: 1 });
+      // The brand's uploaded logo replaces the wordmark when there is one.
+      if (logoOk) {
+        try { doc.image(opts.logo, 40, 28, { fit: [150, 28] }); } catch { logoOk = false; }
+      }
+      if (!logoOk) doc.font('Helvetica').fontSize(18).fillColor('#1b212b').text('A I M S 3 6 0', 40, 36, { characterSpacing: 1 });
       doc.fontSize(7).fillColor('#b41f7a').text((ots ? 'OTS REPORT' : 'LINESHEET'), 40, 58, { characterSpacing: 2 });
       doc.font('Helvetica-Bold').fontSize(15).fillColor('#1b212b').text(opts.title, 40, 78);
       doc.font('Helvetica').fontSize(9).fillColor('#727b89').text(opts.subtitle, 40, 98);
@@ -175,11 +193,23 @@ export function toPdf(rows, opts) {
     };
     let y = header();
     const x0 = 40 + (img ? 56 : 0);
+    if (opts.hero && img) {
+      try {
+        doc.save().roundedRect(40, y, W, 150, 8).clip().image(opts.hero, 40, y, { cover: [W, 150], align: 'center', valign: 'center' }).restore();
+        y += 164;
+      } catch { /* skip a picture the PDF writer cannot read */ }
+    }
 
-    for (const { s, c } of rows) {
-      if (y + rowH > doc.page.height - 50) {
+    for (const { s, c, section, sectionNote } of rows) {
+      if (y + rowH + (section ? 34 : 0) > doc.page.height - 50) {
         doc.addPage();
         y = header();
+      }
+      if (section) {
+        doc.save().roundedRect(40, y, W, 24, 5).fill('#fbe9f4').restore();
+        doc.font('Helvetica-Bold').fontSize(11).fillColor('#1b212b').text(section, 50, y + 7, { width: W / 2, lineBreak: false });
+        if (sectionNote) doc.font('Helvetica').fontSize(9).fillColor('#8c226a').text(sectionNote, 40 + W / 2, y + 8, { width: W / 2 - 10, align: 'right', lineBreak: false });
+        y += 34;
       }
       if (img) {
         const shape = styleShape(s.style, c.color);
@@ -207,6 +237,51 @@ export function toPdf(rows, opts) {
     if (ots) doc.font('Helvetica').fontSize(8).fillColor('#727b89').text('Availability can change; quantities are not reserved.', 40, Math.min(y + 6, doc.page.height - 60));
     doc.end();
   });
+}
+
+// A plain table (customer, product and inventory reports) as CSV or Excel.
+export function tableCsv(report) {
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const body = report.rows.map((r) => report.columns.map((c) => (c.type === 'money' && r[c.key] != null ? Number(r[c.key]).toFixed(2) : r[c.key])));
+  return [report.columns.map((c) => c.label), ...body].map((r) => r.map(esc).join(',')).join('\r\n');
+}
+
+export async function tableXlsx(report, subtitle) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'AIMS360 B2B Portal';
+  const ws = wb.addWorksheet(report.title.replace(' Report', ''), { views: [{ state: 'frozen', ySplit: 5 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+  const cols = report.columns;
+  sheetHeader(ws, { title: report.title, subtitle }, cols.length);
+  headRow(ws, 5, cols.map((c) => c.label));
+  const numeric = (c) => ['number', 'money'].includes(c.type);
+  cols.forEach((c, i) => { if (numeric(c)) ws.getRow(5).getCell(i + 1).alignment = { vertical: 'middle', horizontal: 'right' }; else ws.getRow(5).getCell(i + 1).alignment = { vertical: 'middle', horizontal: 'left' }; });
+  let n = 6;
+  for (const r of report.rows) {
+    const row = ws.getRow(n++);
+    cols.forEach((c, i) => {
+      const cell = row.getCell(i + 1);
+      cell.value = r[c.key] ?? (numeric(c) ? null : '');
+      if (c.type === 'money') cell.numFmt = '$#,##0.00';
+      if (c.type === 'number') cell.numFmt = '#,##0.##';
+    });
+    row.getCell(1).font = { bold: true };
+  }
+  const total = ws.getRow(n);
+  total.getCell(1).value = `Total (${report.rows.length})`;
+  cols.forEach((c, i) => {
+    if (report.totals[c.key] == null) return;
+    total.getCell(i + 1).value = report.totals[c.key];
+    total.getCell(i + 1).numFmt = c.type === 'money' ? '$#,##0.00' : '#,##0.##';
+  });
+  total.font = { bold: true };
+  total.eachCell((cell) => (cell.border = { top: { style: 'thin', color: { argb: 'FF999999' } } }));
+  ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: Math.max(5, n - 1), column: cols.length } };
+  ws.columns.forEach((column, i) => {
+    const c = cols[i];
+    const longest = Math.max(c.label.length, ...report.rows.slice(0, 200).map((r) => String(r[c.key] ?? '').length));
+    column.width = Math.min(38, Math.max(10, longest + 3));
+  });
+  return wb.xlsx.writeBuffer();
 }
 
 const TYPES = {

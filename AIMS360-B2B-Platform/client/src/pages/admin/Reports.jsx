@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { get, money } from '../../api.js';
 import { saveFile } from '../../components/ExportMenu.jsx';
+import DataReport from './DataReport.jsx';
 
 const num = (n) => Number(n || 0).toLocaleString('en-US');
 const csv = (rows) => rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
@@ -42,7 +43,7 @@ function Bars({ items, sub }) {
   );
 }
 
-export default function Reports() {
+function Sales() {
   const [months, setMonths] = useState(6);
   const [r, setR] = useState(null);
   useEffect(() => { get(`/admin/reports?months=${months}`).then(setR); }, [months]);
@@ -54,11 +55,7 @@ export default function Reports() {
   return (
     <div className="stack">
       <div className="spread">
-        <div>
-          <div className="eyebrow">Portal Bookings</div>
-          <h1>Reports</h1>
-          <p className="muted">Orders placed through the portal. Cancelled orders and bulk releases are left out so nothing is counted twice.</p>
-        </div>
+        <p className="muted small" style={{ margin: 0 }}>Orders placed through the portal. Cancelled orders and bulk releases are left out so nothing is counted twice.</p>
         <div className="seg" role="group" aria-label="Period">
           {[3, 6, 12].map((m) => <button key={m} className={months === m ? 'on' : ''} onClick={() => setMonths(m)}>{m} Months</button>)}
         </div>
@@ -159,6 +156,28 @@ export default function Reports() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const TABS = [['sales', 'Sales'], ['customers', 'Customers'], ['products', 'Products'], ['inventory', 'Inventory']];
+
+export default function Reports() {
+  const [tab, setTab] = useState('sales');
+  const [filters, setFilters] = useState(null);
+  useEffect(() => { get('/admin/reports/filters').then(setFilters); }, []);
+  return (
+    <div className="stack">
+      <div className="spread">
+        <div>
+          <div className="eyebrow">Pull, Filter, Export</div>
+          <h1>Reports</h1>
+        </div>
+        <div className="seg big" role="tablist" aria-label="Report">
+          {TABS.map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>)}
+        </div>
+      </div>
+      {tab === 'sales' ? <Sales /> : filters && <DataReport key={tab} type={tab} filters={filters} />}
     </div>
   );
 }

@@ -35,12 +35,17 @@ export default function Dashboard() {
           <Link to="/admin/orders"><b>Go to Orders →</b></Link>
         </div>
       )}
-      <div className="grid cols-2">
+      <div className="grid dash-split">
         <div className="card">
           <h2>Orders by Type</h2>
-          {d.byType.map((x) => (
-            <div key={x.code} className="kv"><span>{TYPE[x.code]}</span><b>{x.count}</b></div>
-          ))}
+          <div className="hbars" style={{ marginTop: 4, marginBottom: 16 }}>
+            {d.byType.map((x) => (
+              <div key={x.code} className="hbar">
+                <div className="hbar-top"><span className="hbar-name"><b>{TYPE[x.code]}</b></span><span className="hbar-val">{x.count}</span></div>
+                <div className="hbar-track"><div className="hbar-fill" style={{ width: `${Math.max(2, (x.count / Math.max(1, ...d.byType.map((y) => y.count))) * 100)}%` }} /></div>
+              </div>
+            ))}
+          </div>
           <div className="kv"><span className="muted">Active buyers</span><b>{t.buyers}</b></div>
         </div>
         <div className="card">

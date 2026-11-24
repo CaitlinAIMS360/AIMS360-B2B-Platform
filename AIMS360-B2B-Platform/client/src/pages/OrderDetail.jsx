@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useFillCart } from './QuickOrder.jsx';
 import { get, post, money, shortDate } from '../api.js';
-import { StatusPill, TypePill, ConfirmButton, canPrint } from '../components/bits.jsx';
+import { StatusPill, TypePill, ConfirmButton, Sizes, canPrint } from '../components/bits.jsx';
 import { Wordmark } from '../theme.jsx';
 
 // One screen for buyers and admins; the actions differ by role.
@@ -86,6 +86,8 @@ export default function OrderDetail({ role }) {
         </div>
       </div>
       {error && <div className="notice bad" role="alert">{error}</div>}
+      {o.aims?.sent && <div className="notice good">Created in AIMS360{o.aims.order ? ` as order ${o.aims.order}` : ''}.</div>}
+      {o.aims && !o.aims.sent && <div className="notice bad" role="alert">This order was saved in the portal but AIMS360 did not accept it: {o.aims.error}</div>}
       {role === 'admin' && o.salesRep && (
         <div className="small muted">
           Sales rep {o.salesRep}{o.commissionPercent != null ? ` (${o.commissionPercent}% commission)` : ''}
@@ -110,7 +112,7 @@ export default function OrderDetail({ role }) {
         <h2>Lines</h2>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Style</th><th>Colour</th><th>Sizes</th><th className="right">Price</th><th className="right">Units</th><th className="right">Amount</th></tr></thead>
+            <thead><tr><th>Style</th><th>Color</th><th>Sizes</th><th className="right">Price</th><th className="right">Units</th><th className="right">Amount</th></tr></thead>
             <tbody>
               {o.lineItems.map((l) => {
                 const u = l.sizes.reduce((t, z) => t + z.orderQuantity, 0);
@@ -118,7 +120,7 @@ export default function OrderDetail({ role }) {
                   <tr key={l.style + l.color}>
                     <td><b>{l.style}</b><div className="small muted">{l.description}</div></td>
                     <td>{l.colorDescription}</td>
-                    <td className="small">{l.sizes.map((z) => `${z.sizeName} × ${z.orderQuantity}`).join('   ')}</td>
+                    <td><Sizes items={l.sizes.map((z) => [z.sizeName, z.orderQuantity])} /></td>
                     <td className="right">{money(l.price)}{l.discountPercent > 0 && <div className="small" style={{ color: 'var(--accent-text)' }}>{l.discountPercent}% off {money(l.listPrice)}</div>}</td>
                     <td className="right">{u}</td>
                     <td className="right">{money(u * l.price)}</td>

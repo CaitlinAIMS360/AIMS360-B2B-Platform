@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { get, money, shortDate } from '../api.js';
-import { StatusPill, TypePill } from '../components/bits.jsx';
+import { StatusPill, TypePill, Empty } from '../components/bits.jsx';
 
 export function OrdersTable({ orders, base, showCustomer }) {
   const nav = useNavigate();
-  if (!orders.length) return <p className="muted">No orders to show.</p>;
+  if (!orders.length) return <Empty title="No Orders Here">Try a different filter, or start a new order from the catalog.</Empty>;
   return (
     <div className="table-wrap">
       <table>

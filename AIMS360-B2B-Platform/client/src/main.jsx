@@ -5,7 +5,7 @@ import '@fontsource-variable/montserrat';
 import './styles.css';
 import { get, post } from './api.js';
 import { CartProvider, useCart } from './cart.jsx';
-import { useTheme, ThemeToggle, Wordmark } from './theme.jsx';
+import { setBrand, useTheme, ThemeToggle, Wordmark } from './theme.jsx';
 import Login from './pages/Login.jsx';
 import Home from './pages/Home.jsx';
 import Catalog from './pages/Catalog.jsx';
@@ -20,6 +20,7 @@ import LinesheetEdit from './pages/LinesheetEdit.jsx';
 import OtsReport from './pages/OtsReport.jsx';
 import Guest from './pages/Guest.jsx';
 import QuickOrder from './pages/QuickOrder.jsx';
+import Connect, { DataBanner } from './pages/admin/Connect.jsx';
 import AdminDashboard from './pages/admin/Dashboard.jsx';
 import AdminOrders from './pages/admin/Orders.jsx';
 import AdminBuyers from './pages/admin/Buyers.jsx';
@@ -32,7 +33,7 @@ function Shell({ config, user, onLogout, theme, children }) {
   const link = ({ isActive }) => (isActive ? 'active' : '');
   return (
     <>
-      {config.mode === 'demo' && <div className="demo-banner">Demo mode: sample data, nothing is sent to AIMS360.</div>}
+      <DataBanner config={config} admin={user.role === 'admin'} />
       <header className="topbar">
         <div className="topbar-inner">
           <Link to="/" aria-label="Home"><Wordmark sub={user.role === 'admin' ? 'Brand Admin' : 'B2B Wholesale'} /></Link>
@@ -85,6 +86,7 @@ function App() {
   useEffect(() => {
     get('/config').then((c) => {
       setConfig(c);
+      setBrand({ logo: c.logo, logoDark: c.logoDark, name: c.brandName });
       document.documentElement.style.setProperty('--accent', c.accentColor);
     });
     get('/auth/me').then(setUser).catch(() => setUser(null));
@@ -136,9 +138,11 @@ function App() {
             <Route path="/admin/orders" element={<AdminOrders />} />
             <Route path="/admin/orders/:id" element={<OrderDetail role="admin" />} />
             <Route path="/admin/reports" element={<AdminReports />} />
+            <Route path="/admin/connect" element={<Connect onChange={() => get('/config').then(setConfig)} />} />
             <Route path="/admin/buyers" element={<AdminBuyers />} />
             <Route path="/admin/settings" element={<AdminSettings onSaved={(s) => {
               setConfig((c) => ({ ...c, brandName: s.brandName, accentColor: s.accentColor }));
+              setBrand({ logo: s.logo, logoDark: s.logoDark, name: s.brandName });
               document.documentElement.style.setProperty('--accent', s.accentColor);
             }} />} />
             <Route path="*" element={<Navigate to="/" replace />} />

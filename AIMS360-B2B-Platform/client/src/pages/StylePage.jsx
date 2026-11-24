@@ -77,7 +77,7 @@ export default function StylePage({ role }) {
             <div className="table-wrap">
               <table className="sizegrid">
                 <thead>
-                  <tr><th>Colour</th>{sizeNames.map((n) => <th key={n}>{n}</th>)}<th>Units</th></tr>
+                  <tr><th>Color</th>{sizeNames.map((n) => <th key={n}>{n}</th>)}<th>Units</th></tr>
                 </thead>
                 <tbody>
                   {s.colors.map((c, ci) => {
@@ -86,7 +86,7 @@ export default function StylePage({ role }) {
                       <tr key={c.color} onFocus={() => setActive(ci)}>
                         <td>
                           <div className="row" style={{ gap: 8 }}>
-                            <span className="swatch" style={{ background: c.hex }} />
+                            <span className="swatch" data-none={c.hex ? undefined : ''} style={{ background: c.hex }} />
                             <b>{c.colorDescription}</b>
                           </div>
                         </td>
@@ -130,7 +130,7 @@ export default function StylePage({ role }) {
               <h2>Stock by Warehouse</h2>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Colour</th>{s.warehouses[0].stock.map((w) => <th key={w.code} className="right">{w.name} ({w.code})</th>)}</tr></thead>
+                  <thead><tr><th>Color</th>{s.warehouses[0].stock.map((w) => <th key={w.code} className="right">{w.name} ({w.code})</th>)}</tr></thead>
                   <tbody>
                     {s.warehouses.map((c) => (
                       <tr key={c.color}><td><b>{c.colorDescription}</b></td>{c.stock.map((w) => <td key={w.code} className="right">{w.units}</td>)}</tr>

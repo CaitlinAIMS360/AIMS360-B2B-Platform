@@ -39,6 +39,13 @@ export default function Catalog({ role }) {
   const [status, setStatus] = useState('active');
   const [f, setF] = useState(none);
   const [data, setData] = useState(null);
+  const [pics, setPics] = useState(0);
+  // Live pictures arrive in the background; show them as they land.
+  useEffect(() => {
+    const on = () => setPics((n) => n + 1);
+    window.addEventListener('portal:pictures', on);
+    return () => window.removeEventListener('portal:pictures', on);
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -46,7 +53,7 @@ export default function Catalog({ role }) {
       get(`/shop/catalog?${p}`).then(setData);
     }, 150);
     return () => clearTimeout(t);
-  }, [q, season, avail, sort, f, customer, status]);
+  }, [q, season, avail, sort, f, customer, status, pics]);
 
   const toggle = (k, v) => setF((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
   const active = f.category.length + f.color.length + f.gender.length + f.fabric.length + f.division.length + f.group.length + (status !== 'active' ? 1 : 0) + (season ? 1 : 0) + (avail ? 1 : 0) + (q ? 1 : 0);

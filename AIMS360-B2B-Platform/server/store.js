@@ -27,6 +27,9 @@ export const defaultSettings = {
   termsText:
     'Orders are subject to availability and credit approval. Prebook orders ship within the selected delivery window. ' +
     'Cancellations after an order is picked are not accepted.',
+  // Brand logo, uploaded by a brand admin (PNG data URL). Blank shows the AIMS360 wordmark.
+  logo: '',
+  logoDark: '',
   deliveryWindows: [
     { id: 'dw-sp27-1', name: 'Spring Delivery 1', start: '2027-01-15', complete: '2027-02-15' },
     { id: 'dw-sp27-2', name: 'Spring Delivery 2', start: '2027-02-15', complete: '2027-03-15' },

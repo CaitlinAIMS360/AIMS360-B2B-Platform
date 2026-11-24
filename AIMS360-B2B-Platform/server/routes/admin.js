@@ -6,6 +6,11 @@ import { getProvider } from '../aims360/index.js';
 import { load, save, id, logActivity, defaultSettings } from '../store.js';
 import { creditCheck, releaseFromBulk } from '../ordering.js';
 import { orderView } from '../views.js';
+import { cleanLayout, cleanImage } from '../linesheets.js';
+import { dataReport, reportFilters } from '../reports.js';
+import { applyLive, clearLive, addPictures, liveState } from '../aims360/live.js';
+import { refreshFromRest } from '../aims360/rest.js';
+import { tableCsv, tableXlsx } from '../exports.js';
 
 const r = Router();
 r.use(requireRole('admin'));
@@ -86,6 +91,59 @@ r.get('/reports', (req, res) => {
     openByShip: group(open, (o) => [[(o.start || o.entered).slice(0, 7), orderView(o).openValue, o.bookedTotal]]).map((g) => ({ ...g, label: monthLabel(g.key) })).sort((a, b) => a.key.localeCompare(b.key)),
     exposure: p().listCustomers().map((c) => ({ key: c.customerAccount, label: c.customerName, ...creditCheck(c, 0) })).filter((c) => c.limit).sort((a, b) => (a.available ?? 0) - (b.available ?? 0))
   });
+});
+
+// Live AIMS360 data. The page reads it through the viewer's connector and posts it here.
+r.get('/live', (req, res) => res.json(liveState()));
+r.post('/live', (req, res, next) => {
+  try {
+    const kept = applyLive(req.body || {});
+    globalThis.__portalSaveLive?.(kept);
+    logActivity(req.user.email, 'live.connected', `${liveState().account} · ${liveState().companyName}`);
+    res.json(liveState());
+  } catch (e) {
+    next(e);
+  }
+});
+r.post('/live/pictures', (req, res) => res.json({ pictures: addPictures(req.body?.images) }));
+// Hosted portal: read from the AIMS360 REST API again right now.
+r.post('/live/refresh', async (req, res, next) => {
+  try {
+    res.json(await refreshFromRest());
+  } catch (e) {
+    next(e);
+  }
+});
+r.delete('/live', (req, res) => {
+  clearLive();
+  globalThis.__portalSaveLive?.(null);
+  res.json(liveState());
+});
+
+// Customer, product and inventory reports, on screen and as CSV or Excel.
+r.get('/reports/filters', (req, res) => res.json(reportFilters()));
+r.get('/reports/data/:type', (req, res, next) => {
+  try {
+    res.json(dataReport(req.params.type, req.query));
+  } catch (e) {
+    next(e);
+  }
+});
+r.get('/reports/data/:type/export', async (req, res, next) => {
+  try {
+    const report = dataReport(req.params.type, req.query);
+    if (!report.rows.length) return res.status(400).json({ error: 'Nothing to export. Clear a filter and try again.' });
+    const day = new Date().toLocaleDateString('en-CA');
+    const stamp = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Los_Angeles' }) + ' PT';
+    const xlsx = req.query.format === 'xlsx';
+    const body = xlsx ? await tableXlsx(report, `${report.count} rows · ${stamp}`) : tableCsv(report);
+    const name = `${report.title.toLowerCase().replace(/\s+/g, '-')}-${day}.${xlsx ? 'xlsx' : 'csv'}`;
+    res.set({ 'Content-Type': xlsx ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"` })
+      .send(Buffer.isBuffer(body) ? body : Buffer.from(body));
+    logActivity(req.user.email, 'report.exported', `${report.title} (${xlsx ? 'Excel' : 'CSV'})`);
+  } catch (e) {
+    next(e);
+  }
 });
 
 r.get('/orders', (req, res) => {
@@ -251,7 +309,7 @@ r.post('/access-requests/:id/decline', (req, res) => {
 function cleanLinesheet(body, existing = {}) {
   const name = String(body.name ?? existing.name ?? '').trim();
   if (!name) throw Object.assign(new Error('Give the linesheet a name.'), { status: 400 });
-  const styles = [...new Set((body.styles ?? existing.styles ?? []).filter((code) => p().getStyle(code)))];
+  const { layout, styles } = cleanLayout(body, existing);
   if (!styles.length) throw Object.assign(new Error('Add at least one style.'), { status: 400 });
   return {
     name,
@@ -259,6 +317,8 @@ function cleanLinesheet(body, existing = {}) {
     season: p().listSeasons().some((x) => x.code === body.season) ? body.season : '',
     active: body.active ?? existing.active ?? true,
     customerAccounts: (body.customerAccounts ?? existing.customerAccounts ?? []).filter((a) => p().getCustomer(a)),
+    hero: cleanImage(body.hero, existing.hero, 900_000, 'The hero image'),
+    layout,
     styles
   };
 }
@@ -267,7 +327,7 @@ r.post('/linesheets', (req, res, next) => {
   try {
     const st = load();
     const now = new Date().toISOString();
-    const l = { id: id('ls'), ...cleanLinesheet(req.body || {}), createdAt: now, updatedAt: now };
+    const l = { id: id('ls'), ...cleanLinesheet(req.body || {}), company: p().company() || undefined, createdAt: now, updatedAt: now };
     st.linesheets.unshift(l);
     save();
     logActivity(req.user.email, 'linesheet.created', l.name);
@@ -303,9 +363,15 @@ r.delete('/linesheets/:id', (req, res) => {
 
 const editable = Object.keys(defaultSettings);
 r.get('/settings', (req, res) => res.json(load().settings));
-r.put('/settings', (req, res) => {
+r.put('/settings', (req, res, next) => {
   const st = load();
   const body = req.body || {};
+  try {
+    body.logo = cleanImage(body.logo, st.settings.logo, 400_000, 'The logo');
+    body.logoDark = cleanImage(body.logoDark, st.settings.logoDark, 400_000, 'The dark mode logo');
+  } catch (e) {
+    return next(e);
+  }
   for (const k of editable) if (k in body) st.settings[k] = body[k];
   if (!['none', 'msrp', 'wholesale'].includes(st.settings.guestPrices)) st.settings.guestPrices = 'none';
   st.settings.guestBrowsing = !!st.settings.guestBrowsing;

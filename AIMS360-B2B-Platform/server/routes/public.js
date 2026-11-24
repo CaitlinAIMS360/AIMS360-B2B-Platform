@@ -1,3 +1,4 @@
+import { sectionsOf, layoutOf } from '../linesheets.js';
 // Guest browsing: anyone with the link can look at the catalog and the
 // linesheets shared with all customers. No stock, no ordering, and prices
 // only as the brand's settings allow. Guests can request an account.
@@ -59,14 +60,16 @@ r.get('/catalog/:style', (req, res) => {
   res.json({ ...guestStyle(s, load().settings), guestPrices: load().settings.guestPrices });
 });
 
-const publicSheets = () => load().linesheets.filter((l) => l.active && !l.customerAccounts.length);
+const visibleStyle = (code) => { const s = p().getStyle(code); return s && s.status !== 'Inactive' ? s : null; };
+const publicSheets = () => load().linesheets.filter((l) => l.active && !l.customerAccounts.length && (l.company || '') === p().company());
 
 r.get('/linesheets', (req, res) => {
   res.json(
     publicSheets().map((l) => {
       const styles = l.styles.map((c) => p().getStyle(c)).filter((x) => x && x.status !== 'Inactive');
       return {
-        id: l.id, name: l.name, description: l.description, styleCount: styles.length,
+        id: l.id, name: l.name, description: l.description, styleCount: styles.length, hero: l.hero || '',
+        dropCount: layoutOf(l).filter((x) => x.type === 'divider').length,
         seasonName: p().listSeasons().find((s) => s.code === l.season)?.description || '',
         cover: styles.slice(0, 4).map((s) => `/api/images/${s.style}/${s.colors[0].color}.svg`)
       };
@@ -79,7 +82,8 @@ r.get('/linesheets/:id', (req, res) => {
   if (!l) return res.status(404).json({ error: 'Linesheet not found' });
   const { settings } = load();
   res.json({
-    id: l.id, name: l.name, description: l.description,
+    id: l.id, name: l.name, description: l.description, hero: l.hero || '',
+    sections: sectionsOf(l, (code) => { const s = visibleStyle(code); return s ? guestStyle(s, settings) : null; }),
     seasonName: p().listSeasons().find((s) => s.code === l.season)?.description || '',
     items: l.styles.map((c) => p().getStyle(c)).filter((x) => x && x.status !== 'Inactive').map((s) => guestStyle(s, settings))
   });

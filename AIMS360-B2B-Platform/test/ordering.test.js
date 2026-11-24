@@ -404,3 +404,73 @@ test('inactive styles, line discounts and a second sales rep', async () => {
   assert.match(buildPreview(admin, cart({ options: { salesRep: 'CMO', commissionPercent: 70, salesRep2: 'WST', commissionPercent2: 40 } })).errors.join(), /more than 100%/);
   assert.match(buildPreview(buyer, cart({ lines: [{ style: 'TP2998', color: 'NVY', sizes: { M: 20 } }] })).errors.join(), /no longer available/);
 });
+
+test('linesheet dividers, hero image and logo', async () => {
+  const { cleanLayout, sectionsOf, cleanImage } = await import('../server/linesheets.js');
+  const out = cleanLayout({ layout: [
+    { type: 'style', style: 'TP3001' },
+    { type: 'divider', title: ' Drop 1 ', note: 'Ships Jan 15' },
+    { type: 'style', style: 'AW1001' }, { type: 'style', style: 'AW1001' }, { type: 'style', style: 'NOPE' },
+    { type: 'divider', title: 'Drop 2' }
+  ] });
+  assert.deepEqual(out.styles, ['TP3001', 'AW1001']);
+  const sections = sectionsOf(out, (code) => ({ style: code }));
+  assert.deepEqual(sections.map((s) => [s.title, s.items.length]), [['', 1], ['Drop 1', 1], ['Drop 2', 0]]);
+  assert.throws(() => cleanLayout({ layout: [{ type: 'divider', title: '' }, { type: 'style', style: 'TP3001' }] }), /divider a title/);
+  assert.deepEqual(sectionsOf({ styles: ['TP3001'] }, (c) => ({ style: c })).map((s) => s.title), [''], 'older linesheets still work');
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  assert.equal(cleanImage(png, '', 1000, 'The logo'), png);
+  assert.equal(cleanImage(undefined, png, 1000, 'The logo'), png, 'left alone when not sent');
+  assert.equal(cleanImage('', png, 1000, 'The logo'), '', 'blank removes it');
+  assert.throws(() => cleanImage('data:text/html;base64,AAAA', '', 1000, 'The logo'), /PNG or JPEG/);
+  assert.throws(() => cleanImage(png, '', 10, 'The logo'), /too large/);
+
+  // The PDF and Excel exports take the divider headings, the hero and the logo.
+  const { toPdf, toXlsx, toOrderForm } = await import('../server/exports.js');
+  const { catalogStyle } = await import('../server/ordering.js');
+  const { getProvider } = await import('../server/aims360/index.js');
+  const { load } = await import('../server/store.js');
+  const s = catalogStyle(getProvider().getStyle('AW1001'), 'CMAIM', load().settings);
+  const rows = s.colors.map((c, i) => ({ s, c, ...(i === 0 ? { section: 'Drop 1', sectionNote: 'Ships Jan 15' } : {}) }));
+  const pdf = await toPdf(rows, { kind: 'linesheet', title: 'T', subtitle: '', hero: png, logo: png });
+  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+  const ExcelJS = (await import('exceljs')).default;
+  for (const buf of [await toXlsx(rows, { kind: 'linesheet', title: 'T', subtitle: '' }), await toOrderForm(rows, { title: 'T', subtitle: '' })]) {
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(buf);
+    let found = false; wb.worksheets[0].eachRow((row) => { if (String(row.getCell(1).value).startsWith('Drop 1')) found = true; });
+    assert.ok(found, 'divider heading row present');
+  }
+  // The order form still imports with a divider row in it.
+  const { parseOrderForm } = await import('../server/quickOrder.js');
+  const form = await parseOrderForm(Buffer.from(await toOrderForm(rows, { title: 'T', subtitle: '' })).toString('base64'));
+  assert.deepEqual(form.raw, []);
+});
+
+test('customer, product and inventory reports', async () => {
+  const { dataReport } = await import('../server/reports.js');
+  const { tableCsv, tableXlsx } = await import('../server/exports.js');
+  const c = dataReport('customers', {});
+  const key = c.rows.find((r) => r.account === 'CMAIM');
+  assert.equal(key.creditLimit, 25000);
+  assert.equal(key.priceSheet, 'Key Accounts');
+  assert.equal(key.logins, 1);
+  assert.equal(dataReport('customers', { q: 'austin' }).count, 1);
+  const p = dataReport('products', { status: 'all' });
+  assert.ok(p.rows.some((r) => r.style === 'TP2998' && r.status === 'Inactive'));
+  assert.ok(!dataReport('products', {}).rows.some((r) => r.style === 'TP2998'), 'active only by default');
+  assert.equal(p.rows.find((r) => r.style === 'TP3001').markup, 3);
+  const inv = dataReport('inventory', { q: 'AW1001' });
+  const blk = inv.rows.find((r) => r.color === 'Black');
+  assert.equal(blk.onHand, 257);
+  assert.equal(blk.wh0 + blk.wh1, 257, 'warehouses add up to on hand');
+  assert.equal(blk.value, 257 * 18);
+  assert.equal(inv.totals.onHand, inv.rows.reduce((t, r) => t + r.onHand, 0));
+  const bySize = dataReport('inventory', { q: 'AW1001', detail: 'size' });
+  assert.equal(bySize.count, 10);
+  assert.ok(dataReport('inventory', { level: 'out' }).rows.every((r) => r.onHand === 0));
+  assert.throws(() => dataReport('nope'), /customers, products or inventory/);
+  assert.match(tableCsv(inv).split('\r\n')[0], /^"Style","Description","Collection","Season","Color","On Hand"/);
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await tableXlsx(inv, 'test'));
+  assert.equal(wb.worksheets[0].getRow(5).getCell(1).value, 'Style');
+});

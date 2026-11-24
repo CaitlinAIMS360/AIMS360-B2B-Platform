@@ -12,14 +12,24 @@ import adminRoutes from '../server/routes/admin.js';
 import shopRoutes from '../server/routes/shop.js';
 import publicRoutes from '../server/routes/public.js';
 import { seedDemoHistory } from '../server/demoSeed.js';
+import { applyLive, liveState, livePicture } from '../server/aims360/live.js';
 
 load();
 seedDemoHistory();
+// Live AIMS360 data from the last visit is kept in this browser so a reload does not start over.
+const LIVE = 'aims360-b2b:live';
+globalThis.__portalSaveLive = (snapshot) => {
+  try { snapshot ? localStorage.setItem(LIVE, JSON.stringify(snapshot)) : localStorage.removeItem(LIVE); } catch { /* too big or blocked: live data lasts for this visit */ }
+};
+try {
+  const saved = JSON.parse(localStorage.getItem(LIVE) || 'null');
+  if (saved) applyLive(saved);
+} catch { /* start on sample data */ }
 const app = Router();
 app.get('/api/config', (req, res) => {
   const { settings } = load();
   res.json({
-    brandName: settings.brandName, tagline: settings.tagline, accentColor: settings.accentColor, mode: getProvider().mode,
+    brandName: settings.brandName, tagline: settings.tagline, accentColor: settings.accentColor, logo: settings.logo || '', logoDark: settings.logoDark || '', mode: getProvider().mode, live: liveState(), canConnect: true,
     orderTypes: Object.values(ORDER_TYPES).map(({ code, label }) => ({ code, label })),
     deliveryWindows: settings.deliveryWindows, termsText: settings.termsText, requireTerms: settings.requireTerms,
     minOrderUnits: settings.minOrderUnits, minOrderAmount: settings.minOrderAmount, guestBrowsing: settings.guestBrowsing
@@ -28,7 +38,7 @@ app.get('/api/config', (req, res) => {
 app.post('/api/auth/login', (req, res) => {
   const { email, password, portal } = req.body || {};
   const u = login(email, password, portal === 'admin' ? 'admin' : 'buyer');
-  if (!u) return res.status(401).json({ error: 'That email and password do not match.' });
+  if (!u) return res.status(401).json({ error: 'That email and password do not match. Runway and AIMS360 passwords do not work here yet; use one of the demo logins below.' });
   req.session.uid = u.id;
   res.json(publicUser(u));
 });
@@ -50,8 +60,11 @@ let session = {};
 try { session = JSON.parse(localStorage.getItem(SESSION) || '{}'); } catch { /* signed out */ }
 
 const images = new Map();
+// Live data never gets a drawn stand-in: a style with no picture says so in words.
+const NO_PICTURE = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 420"><text x="200" y="214" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="20" fill="#8b8799">No picture</text></svg>');
 const imageUri = (style, color) => {
   const k = style + '|' + color;
+  if (liveState().on) return livePicture(style, color) || NO_PICTURE;
   if (!images.has(k)) images.set(k, 'data:image/svg+xml,' + encodeURIComponent(styleImageSvg(style, color) || '<svg xmlns="http://www.w3.org/2000/svg"/>'));
   return images.get(k);
 };

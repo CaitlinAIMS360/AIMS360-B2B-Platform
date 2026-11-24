@@ -1,19 +1,26 @@
 import { useEffect, useState } from 'react';
 import { get, put } from '../../api.js';
+import ImagePicker from '../../components/ImagePicker.jsx';
 
 export default function Settings({ onSaved }) {
   const [s, setS] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
   useEffect(() => { get('/admin/settings').then(setS); }, []);
   if (!s) return null;
 
   const set = (k, v) => { setSaved(false); setS((x) => ({ ...x, [k]: v })); };
   const setWindow = (i, k, v) => set('deliveryWindows', s.deliveryWindows.map((w, j) => (j === i ? { ...w, [k]: v } : w)));
   const save = async () => {
-    const out = await put('/admin/settings', s);
-    setS(out);
-    setSaved(true);
-    onSaved?.(out);
+    setError('');
+    try {
+      const out = await put('/admin/settings', s);
+      setS(out);
+      setSaved(true);
+      onSaved?.(out);
+    } catch (e) {
+      setError(e.message);
+    }
   };
   const Toggle = ({ k, label, help }) => (
     <label className="check" style={{ marginBottom: 12 }}>
@@ -29,13 +36,30 @@ export default function Settings({ onSaved }) {
         <div className="row">{saved && <span className="pill good">Saved</span>}<button className="btn primary" onClick={save}>Save Settings</button></div>
       </div>
 
+      {error && <div className="notice bad" role="alert">{error}</div>}
       <div className="grid cols-2">
         <div className="card">
           <h2>Brand</h2>
           <div className="field"><label htmlFor="s-bn">Brand name</label><input id="s-bn" value={s.brandName} onChange={(e) => set('brandName', e.target.value)} /></div>
           <div className="field">
-            <label htmlFor="s-ac">Accent colour</label>
+            <label htmlFor="s-ac">Accent Color</label>
             <div className="row"><input id="s-ac" type="color" style={{ width: 56, padding: 2, height: 40 }} value={s.accentColor} onChange={(e) => set('accentColor', e.target.value)} /><span className="muted small">{s.accentColor}</span></div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h2>Logo</h2>
+          <p className="small muted">Shown at the top of every screen, on the sign-in page, and on PDF linesheets. A wide logo with a clear background works best. Click Save Settings to apply.</p>
+          <div className="grid cols-2">
+            <div>
+              <h3>Logo</h3>
+              <ImagePicker label="Logo" value={s.logo} onChange={(v) => set('logo', v)} previewClass="logo" options={{ maxW: 600, maxH: 200, type: 'image/png' }} />
+            </div>
+            <div>
+              <h3>Logo for Dark Mode (Optional)</h3>
+              <ImagePicker label="Dark Mode Logo" value={s.logoDark} onChange={(v) => set('logoDark', v)} previewClass="logo" dark options={{ maxW: 600, maxH: 200, type: 'image/png' }}
+                help="A light-colored version. Without one, your logo sits on a white tile in dark mode." />
+            </div>
           </div>
         </div>
 

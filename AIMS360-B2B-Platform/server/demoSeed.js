@@ -9,9 +9,26 @@ const EXTRA = [
   { customerName: 'Northside Outfitters', city: 'Chicago', state: 'IL', terms: 'NET 60', creditLimit: 30000 }
 ];
 
+// Shows what drop dividers look like on the first sample linesheet. Runs once.
+function seedDrops(st) {
+  if (st.demoDrops) return;
+  const l = st.linesheets.find((x) => x.id === 'ls-sp27-active');
+  const want = ['AW1001', 'AW1002', 'AW1003', 'TP3001'];
+  if (l && !l.layout && want.every((s) => l.styles.includes(s)) && l.styles.length === want.length)
+    l.layout = [
+      { type: 'divider', id: id('div'), title: 'Drop 1', note: 'Ships January 15' },
+      { type: 'style', style: 'AW1001' }, { type: 'style', style: 'AW1002' },
+      { type: 'divider', id: id('div'), title: 'Drop 2', note: 'Ships February 1' },
+      { type: 'style', style: 'AW1003' }, { type: 'style', style: 'TP3001' }
+    ];
+  st.demoDrops = true;
+  save();
+}
+
 export function seedDemoHistory() {
   const st = load();
   const p = getProvider();
+  seedDrops(st);
   if (st.demoSeeded || p.mode !== 'demo') return;
   let seedN = 7;
   const rnd = () => ((seedN = (seedN * 1103515245 + 12345) % 2147483648) / 2147483648);

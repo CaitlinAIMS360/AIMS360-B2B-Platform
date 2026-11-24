@@ -20,7 +20,7 @@ export default function ProductCard({ s, base = '/catalog', guest }) {
             {s.price == null && s.retail == null && <span className="small muted">Sign in for pricing</span>}
           </span>
           <span className="swatches">
-            {s.colors.map((c) => <span key={c.color} className="swatch" style={{ background: c.hex }} title={c.colorDescription} />)}
+            {s.colors.map((c) => <span key={c.color} className="swatch" data-none={c.hex ? undefined : ''} style={{ background: c.hex }} title={c.colorDescription} />)}
           </span>
         </div>
       </div>
