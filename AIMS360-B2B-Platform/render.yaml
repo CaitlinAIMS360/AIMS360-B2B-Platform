@@ -1,0 +1,20 @@
+# One-click setup for Render (render.com): New > Blueprint > pick this repo.
+services:
+  - type: web
+    name: aims360-b2b-portal
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/config
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: portal-data
+      mountPath: /var/data
+      sizeGB: 1
